@@ -27,9 +27,8 @@ func scrapeInfo(doc *goquery.Document) *Info {
 	// How to test selector? Use the console, to write jQueries, and see if you
 	// are getting the correct output. functions like alert, innerText,
 	// specifying index simply by [...] after selector (...) all are helpful.
-	// The $(..) command can only be used if
-	// your website uses jQueries (which in most cases it does) else you have
-	// to actually write jQueries!
+	// The $(..) command can only be used if your website uses jQueries (which
+	// in most cases it does) else you have to actually write jQueries!
 	var data Info
 
 	// Find everything other than the code.
@@ -48,15 +47,12 @@ func scrapeInfo(doc *goquery.Document) *Info {
 					case 0:
 						data.SubmissionID = strings.TrimSpace(value)
 					case 1:
-						auth := strings.Split(strings.TrimSpace(value),
-							"\n") // Splits the two words.
-						data.Author = auth[len(auth)-1] // Get last element.
+						data.Author = doc.Find(".rated-user").Text()
 					case 2:
 						// Remove all the spaces and "\n" from the string.
-						data.Problem = strings.TrimSpace(
-							strings.ReplaceAll(
-								strings.ReplaceAll(value, " ", ""),
-								"\n", ""))
+						data.Problem = strings.ReplaceAll(
+							strings.ReplaceAll(value, " ", ""),
+							"\n", "")
 					case 3:
 						data.Language = strings.TrimSpace(value)
 					case 4:
@@ -74,7 +70,7 @@ func scrapeInfo(doc *goquery.Document) *Info {
 }
 
 func main() {
-	res, err := http.Get("https://codeforces.com/contest/1696/submission/161733082")
+	res, err := http.Get("https://codeforces.com/contest/1706/submission/164749937")
 	if err != nil {
 		log.Fatal(err)
 	}
