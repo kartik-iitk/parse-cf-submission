@@ -8,16 +8,16 @@ import (
 	"strings"
 )
 
-type info struct {
-	submissionID string
-	author       string
-	problem      string
-	language     string
-	verdict      string
-	code         string
+type Info struct {
+	SubmissionID string
+	Author       string
+	Problem      string
+	Language     string
+	Verdict      string
+	Code         string
 }
 
-func scrapeInfo(doc *goquery.Document) *info {
+func scrapeInfo(doc *goquery.Document) *Info {
 	// Method to find selector for find: go to browser, use inspect element
 	// feature, and hover over required portion of the html.
 	// Next, see the required class-type of immediate or close-by parents and
@@ -30,7 +30,7 @@ func scrapeInfo(doc *goquery.Document) *info {
 	// The $(..) command can only be used if
 	// your website uses jQueries (which in most cases it does) else you have
 	// to actually write jQueries!
-	var data info
+	var data Info
 
 	// Find everything other than the code.
 	doc.Find(".datatable div table tr").Eq(1).Each(
@@ -46,21 +46,21 @@ func scrapeInfo(doc *goquery.Document) *info {
 					value := item.Text()
 					switch index {
 					case 0:
-						data.submissionID = strings.TrimSpace(value)
+						data.SubmissionID = strings.TrimSpace(value)
 					case 1:
 						auth := strings.Split(strings.TrimSpace(value),
 							"\n") // Splits the two words.
-						data.author = auth[len(auth)-1] // Get last element.
+						data.Author = auth[len(auth)-1] // Get last element.
 					case 2:
 						// Remove all the spaces and "\n" from the string.
-						data.problem = strings.TrimSpace(
+						data.Problem = strings.TrimSpace(
 							strings.ReplaceAll(
 								strings.ReplaceAll(value, " ", ""),
 								"\n", ""))
 					case 3:
-						data.language = strings.TrimSpace(value)
+						data.Language = strings.TrimSpace(value)
 					case 4:
-						data.verdict = strings.TrimSpace(value)
+						data.Verdict = strings.TrimSpace(value)
 					}
 				})
 		})
@@ -68,7 +68,7 @@ func scrapeInfo(doc *goquery.Document) *info {
 	// Find the code. find should ideally only return 1 object, but to access
 	// it we use index 0.
 	codeNode := doc.Find(".prettyprint").Eq(0)
-	data.code = codeNode.Text()
+	data.Code = codeNode.Text()
 
 	return &data
 }
