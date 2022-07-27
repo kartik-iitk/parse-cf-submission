@@ -48,9 +48,15 @@ func scrapeInfo(doc *goquery.Document) *info {
 					case 0:
 						data.submissionID = strings.TrimSpace(value)
 					case 1:
-						data.author = strings.TrimSpace(value)
+						auth := strings.Split(strings.TrimSpace(value),
+							"\n") // Splits the two words.
+						data.author = auth[len(auth)-1] // Get last element.
 					case 2:
-						data.problem = strings.TrimSpace(value)
+						// Remove all the spaces and "\n" from the string.
+						data.problem = strings.TrimSpace(
+							strings.ReplaceAll(
+								strings.ReplaceAll(value, " ", ""),
+								"\n", ""))
 					case 3:
 						data.language = strings.TrimSpace(value)
 					case 4:
@@ -84,5 +90,5 @@ func main() {
 	}
 
 	data := scrapeInfo(doc)
-	fmt.Println(*data)
+	fmt.Printf("%+v\n", *data)
 }
