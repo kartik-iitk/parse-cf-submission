@@ -1,24 +1,62 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"log"
-	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
-type Info struct {
+const (
+	CfjailFolderLocation    = "cfjail"
+	CfjailSubmissionsFolder = "submissions"
+	CfjailContestsFolder    = "contests"
+	CfjailContestPrefix     = "contest-"
+	CfjailProblemPrefix     = "problem-"
+)
+
+type SubmissionData struct {
 	SubmissionID string
 	Author       string
-	Problem      string
+	Contest      string
+	PrblmIndx    string
+	PrblmRev     string
 	Language     string
 	Verdict      string
-	Code         string
+	CodePath     string
 }
 
-func scrapeInfo(doc *goquery.Document) *Info {
-	// Method to find selector for find: go to browser, use inspect element
+func checkError(err error) {
+	// To avoid unnecessary duplication of code.
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func loadHTMLFile(path string) []byte {
+	// Load the HTML document. No http implementation to enable offline testing!
+	file, err := os.ReadFile(path)
+	checkError(err)
+	return file
+}
+
+func createGoqueryDoc(html []byte) *goquery.Document {
+	// Generate goquery document from the html file.
+	// Important: The HTML file should be properly formatted (and NOT for eg,
+	// such that body tag and head tag are on the same line) as parsing would
+	// fail without generating an error.
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(html))
+	checkError(err)
+	return doc
+}
+
+func extractUserInfo(doc *goquery.Document, sub *SubmissionData) {
+	// Find everything other than the code.
+
+	// How to find selector for find? go to browser, use inspect element
 	// feature, and hover over required portion of the html.
 	// Next, see the required class-type of immediate or close-by parents and
 	// try searching from there directly, you need not start from the class of
@@ -29,9 +67,6 @@ func scrapeInfo(doc *goquery.Document) *Info {
 	// specifying index simply by [...] after selector (...) all are helpful.
 	// The $(..) command can only be used if your website uses jQueries (which
 	// in most cases it does) else you have to actually write jQueries!
-	var data Info
-
-	// Find everything other than the code.
 	doc.Find(".datatable div table tr").Eq(1).Each(
 		// Find the class datatable (you don't need to start from .body)
 		// and then find list of div tags, then find amongst them
@@ -40,51 +75,91 @@ func scrapeInfo(doc *goquery.Document) *Info {
 		// into the second row (provides index).
 		func(index int, item *goquery.Selection) {
 			// In the row, iterate over all columns (td tags).
-			doc.Find("td").Each(
-				func(index int, item *goquery.Selection) {
-					value := item.Text()
+			doc.Find("td").EachWithBreak(
+				func(index int, item *goquery.Selection) bool {
 					switch index {
 					case 0:
-						data.SubmissionID = strings.TrimSpace(value)
+						sub.SubmissionID = strings.TrimSpace(item.Text())
 					case 1:
-						data.Author = doc.Find(".rated-user").Text()
+						sub.Author = doc.Find(".rated-user").Text()
 					case 2:
 						// Remove all the spaces and "\n" from the string.
-						data.Problem = strings.ReplaceAll(
-							strings.ReplaceAll(value, " ", ""),
+						temp := strings.ReplaceAll(
+							strings.ReplaceAll(item.Text(), " ", ""),
 							"\n", "")
+						tempData := strings.Split(temp, "-")
+						sub.Contest = tempData[0][0 : len(tempData[0])-1]
+						sub.PrblmIndx = tempData[0][len(tempData[0])-1:]
+						sub.PrblmRev = tempData[1]
 					case 3:
-						data.Language = strings.TrimSpace(value)
+						sub.Language = strings.TrimSpace(item.Text())
 					case 4:
-						data.Verdict = strings.TrimSpace(value)
+						sub.Verdict = strings.TrimSpace(item.Text())
+					default:
+						return false // Break out of Each()
 					}
+					return true
 				})
 		})
+}
 
-	// Find the code. find should ideally only return 1 object, but to access
+func createCodeFolder(sub *SubmissionData) string {
+	// Generate folder to store the code.
+	dir := filepath.Join(CfjailFolderLocation,
+		CfjailSubmissionsFolder,
+		CfjailContestsFolder,
+		fmt.Sprintf("%s%s", CfjailContestPrefix, sub.Contest),
+		fmt.Sprintf("%s%s", CfjailProblemPrefix, sub.PrblmIndx))
+	err := os.MkdirAll(dir, os.ModePerm) // Make directories if they don't exist.
+	checkError(err)
+	return dir
+}
+
+func getLanguageExtension(sub *SubmissionData) string {
+	// Get language extension.
+	if strings.Contains(sub.Language, "C++") {
+		return "cpp"
+	} else if strings.Contains(sub.Language, "Java") {
+		return "java"
+	} else if strings.Contains(sub.Language, "Py") {
+		return "py"
+	} else {
+		fmt.Println("Unknown Language! Saving code as a text document.")
+		return "txt"
+	}
+}
+
+func createCodeFile(doc *goquery.Document, sub *SubmissionData) {
+	dir := createCodeFolder(sub)
+	langext := getLanguageExtension(sub)
+
+	// Update CodePath.
+	sub.CodePath = filepath.Join(dir,
+		fmt.Sprintf("%s.%s", sub.SubmissionID, langext))
+
+	// Find the code. find() should ideally only return 1 object, but to access
 	// it we use index 0.
-	codeNode := doc.Find(".prettyprint").Eq(0)
-	data.Code = codeNode.Text()
+	code := doc.Find(".prettyprint").Eq(0).Text()
 
-	return &data
+	// Write the code to file with permission 0644 which stands for:
+	// 1. The file's owner can read and write (6)
+	// 2. Users in the same group as the file's owner can read (first 4)
+	// 3. All users can read (second 4)
+	os.WriteFile(sub.CodePath, []byte(code), 0644)
+}
+
+func Scrape(path string) *SubmissionData {
+	var sub SubmissionData
+	doc := createGoqueryDoc(loadHTMLFile(path))
+	extractUserInfo(doc, &sub)
+	createCodeFile(doc, &sub)
+	return &sub
 }
 
 func main() {
-	res, err := http.Get("https://codeforces.com/contest/1706/submission/164749937")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer res.Body.Close() // deferred closing statement.
-	if res.StatusCode > 400 {
-		log.Fatalf("status code error: %d %s", res.StatusCode, res.Status)
-	}
-
-	// Load the HTML document.
-	doc, err := goquery.NewDocumentFromReader(res.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	data := scrapeInfo(doc)
-	fmt.Printf("%+v\n", *data)
+	// FromSlash() helps in maintaining os-independency.
+	path := filepath.FromSlash(
+		"./html-files/contest_1706_submission_165909579.html")
+	submission1 := Scrape(path)
+	fmt.Printf("%+v", *submission1) // Prints better than fmt.Println()!
 }
